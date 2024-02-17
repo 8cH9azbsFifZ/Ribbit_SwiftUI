@@ -78,7 +78,7 @@ struct ContentView: View {
 			}
 			if listening && feedDecoder(resampled.floatChannelData![0], Int32(resampled.frameLength)) {
 				DispatchQueue.main.async {
-					var payload = [CChar](repeating: 0, count: 257)
+					var payload = [CChar](repeating: 0, count: 257) // FIXME: Magic number?
 					let result = fetchDecoder(&payload)
 					if result < 0 {
 						showStatus("Decoding failed")
@@ -87,12 +87,27 @@ struct ContentView: View {
 						if let msg = String(cString: payload, encoding: .utf8) {
 							message = msg.trimmingCharacters(in: .whitespacesAndNewlines)
 						}
+                        
+                        // Received timestamp
                         let currentDate = Date()
                         let dateFormatter = DateFormatter()
                         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
                         let formattedDate = dateFormatter.string(from: currentDate)
+                        
+                        // Extract Origin Callsign and send ok message
+                        if let index = message.firstIndex(of: ":") {
+                            let origin_callsign = message.prefix(upTo: index)
+                            // Check if ok message was for me?
+                            if !message.contains("@"+self.state.mycallsign)
+                            {
+                                let ok_message = "@" + String(origin_callsign) + " Ok"
+                                transmitMessage(ok_message)
+                            }
+                        } else {
+                            showStatus("Origin Callsign not found")
+                        }
 
-                        self.state.history = self.state.history + "\n" + formattedDate + " "
+                        self.state.history += "\n<" + formattedDate + " "
                          + message
                         showStatus("\(message)\n\n(\(result) bit flip\(result == 1 ? "" : "s") corrected)")
 					}
@@ -209,6 +224,14 @@ struct ContentView: View {
 		initEncoder(&payload)
 		listening = false
 		showStatus("Transmitting")
+        
+        // Transmit timestamp
+        let currentDate = Date()
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let formattedDate = dateFormatter.string(from: currentDate)
+        
+        self.state.history += "\n>" + formattedDate + " " + route
 	}
 	@ObservedObject var state: MyState
 	var body: some View {
