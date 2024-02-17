@@ -12,9 +12,12 @@ class MyState: ObservableObject {
 	@Published var status = "status"
 	@Published var composerLeft = "244 bytes left"
 	@Published var disableTransmit = false
-	@Published var composerText = "Hello World!" {
+    @Published var history = "History"
+    @Published var mycallsign = "MYCALL" // FIXME: Max 5
+    @Published var composerText = "Hello World!" {
 		didSet {
 			let bytes = composerText.withCString { strlen($0) }
+            // FIXME: decrease by ROUTE
 			if bytes <= 256 {
 				let left = 256 - bytes
 				composerLeft = "\(left) byte\(left == 1 ? "" : "s") left"
@@ -84,7 +87,14 @@ struct ContentView: View {
 						if let msg = String(cString: payload, encoding: .utf8) {
 							message = msg.trimmingCharacters(in: .whitespacesAndNewlines)
 						}
-						showStatus("\(message)\n\n(\(result) bit flip\(result == 1 ? "" : "s") corrected)")
+                        let currentDate = Date()
+                        let dateFormatter = DateFormatter()
+                        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+                        let formattedDate = dateFormatter.string(from: currentDate)
+
+                        self.state.history = self.state.history + "\n" + formattedDate + " "
+                         + message
+                        showStatus("\(message)\n\n(\(result) bit flip\(result == 1 ? "" : "s") corrected)")
 					}
 				}
 			}
@@ -190,8 +200,12 @@ struct ContentView: View {
 		}
 	}
 	func transmitMessage(_ text : String) {
-		var payload = [CChar](repeating: 0, count: 256)
-		text.withCString { _ = strncpy(&payload, $0, 256) }
+		var payload = [CChar](repeating: 0, count: 256) // FIXME: Magic var?
+        let route = state.mycallsign + ": " + text;
+        // TODO: Add route here
+        //text.withCString { _ = strncpy(&payload, $0, 256) }
+        route.withCString { _ = strncpy(&payload, $0, 256) }
+
 		initEncoder(&payload)
 		listening = false
 		showStatus("Transmitting")
@@ -201,6 +215,8 @@ struct ContentView: View {
 		VStack {
 			HStack {
 				Text("Ribbit")
+                Spacer()
+                TextField("Callsign", text: $state.mycallsign)
 				Spacer()
 				Button(action: {
 					state.showComposer = true
@@ -211,6 +227,7 @@ struct ContentView: View {
 			Spacer()
 			Text(state.status)
 			Spacer()
+            Text(state.history)
 		}
 		.sheet(isPresented: $state.showComposer) {
 			VStack {
@@ -226,7 +243,7 @@ struct ContentView: View {
 					Spacer()
 					Button(action: {
 						state.showComposer = false
-						transmitMessage(state.composerText)
+                        transmitMessage(state.composerText)
 					}) {
 						Text("TRANSMIT")
 					}
